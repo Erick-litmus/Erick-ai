@@ -10,3 +10,6 @@ ENV/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Local SQLite memory database
+erick_ai_memory.db

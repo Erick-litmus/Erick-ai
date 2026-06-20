@@ -1,7 +1,54 @@
 import os
 import sys
+import sqlite3
 import streamlit as st
 from dotenv import load_dotenv
+
+# Initialize SQLite database for Long-term Memory
+DB_FILE = "erick_ai_memory.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fact TEXT NOT NULL,
+            category TEXT DEFAULT 'general',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_memory(fact: str, category: str = "general") -> str:
+    """Save an important fact, preference, or detail about the user to long-term memory.
+    Use this tool whenever the user tells you their name, age, preferences, what they like, 
+    what project they are working on, or any key personal info."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO memories (fact, category) VALUES (?, ?)", (fact, category))
+    conn.commit()
+    conn.close()
+    return f"Successfully saved to long-term memory: '{fact}'"
+
+def get_memories():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, fact, category, created_at FROM memories ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "fact": r[1], "category": r[2], "created_at": r[3]} for r in rows]
+
+def delete_memory(memory_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+    conn.commit()
+    conn.close()
+
+# Initialize DB on load
+init_db()
 
 # Page configuration for a premium feel
 st.set_page_config(
@@ -189,6 +236,32 @@ if len(st.session_state.messages) > 0:
         use_container_width=True
     )
 
+# 5. File Attachment
+st.sidebar.subheader("📎 Attach Files")
+if "file_uploader_key" not in st.session_state:
+    st.session_state.file_uploader_key = 0
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Image, Audio, or PDF",
+    type=["png", "jpg", "jpeg", "webp", "mp3", "wav", "mpeg", "pdf", "txt", "md"],
+    key=f"file_uploader_{st.session_state.file_uploader_key}",
+    help="Upload an image, audio, or document to analyze it in chat."
+)
+
+# 6. Memory Manager
+st.sidebar.subheader("🧠 Memory Manager")
+memories = get_memories()
+if not memories:
+    st.sidebar.caption("No facts remembered yet. Chat with the AI and tell it about yourself (e.g. 'Remember that I am learning python') to save things here!")
+else:
+    st.sidebar.caption("Erick AI will remember these facts across sessions:")
+    for m in memories:
+        col1, col2 = st.sidebar.columns([0.82, 0.18])
+        col1.markdown(f"<div style='font-size:0.85rem; padding: 2px 0;'>• {m['fact']}</div>", unsafe_allow_html=True)
+        if col2.button("🗑️", key=f"del_{m['id']}", help="Delete this memory"):
+            delete_memory(m['id'])
+            st.rerun()
+
 # ================= MAIN CHAT AREA =================
 st.markdown("<div class='main-title'>Erick AI</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>Your personal AI assistant — Powered by Google Gemini 2.5</div>", unsafe_allow_html=True)
@@ -197,6 +270,19 @@ st.markdown("<div class='subtitle'>Your personal AI assistant — Powered by Goo
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        
+        # Display uploaded file if present
+        if "file_bytes" in msg and msg["file_bytes"]:
+            file_type = msg["file_type"]
+            file_name = msg["file_name"]
+            if file_type.startswith("image/"):
+                st.image(msg["file_bytes"], caption=file_name, width=400)
+            elif file_type.startswith("audio/"):
+                st.audio(msg["file_bytes"], format=file_type)
+            elif file_type == "application/pdf":
+                st.info(f"📄 **Attached PDF:** {file_name}")
+            else:
+                st.info(f"📄 **Attached File:** {file_name}")
         
         # Display search queries if present
         if "search_queries" in msg and msg["search_queries"]:
@@ -210,31 +296,73 @@ for msg in st.session_state.messages:
 
 # User input
 if prompt := st.chat_input("How can I help you today?"):
+    # Check for uploaded file
+    file_bytes = None
+    file_name = None
+    file_type = None
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        file_name = uploaded_file.name
+        file_type = uploaded_file.type
+        
     # Display user message
     with st.chat_message("user"):
         st.markdown(prompt)
+        if file_bytes:
+            if file_type.startswith("image/"):
+                st.image(file_bytes, caption=file_name, width=400)
+            elif file_type.startswith("audio/"):
+                st.audio(file_bytes, format=file_type)
+            elif file_type == "application/pdf":
+                st.info(f"📄 **Attached PDF:** {file_name}")
+            else:
+                st.info(f"📄 **Attached File:** {file_name}")
     
     # Save user message to history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({
+        "role": "user", 
+        "content": prompt,
+        "file_bytes": file_bytes,
+        "file_name": file_name,
+        "file_type": file_type
+    })
     
-    # Prepare generation configuration
-    tools = None
+    # Prepare tools (always include memory tool)
+    tools = [save_memory]
     if enable_search:
-        tools = [types.Tool(google_search=types.GoogleSearch())]
+        tools.append(types.Tool(google_search=types.GoogleSearch()))
+        
+    # Get user memories to enrich system instructions
+    user_memories = get_memories()
+    memory_context = ""
+    if user_memories:
+        memory_context = "\n\nFacts you remember about the user (use these to personalize your answers):\n" + "\n".join([f"- {m['fact']}" for m in user_memories])
+        
+    enriched_system_instruction = system_instruction + memory_context
         
     config = types.GenerateContentConfig(
-        system_instruction=system_instruction,
+        system_instruction=enriched_system_instruction,
         tools=tools
     )
     
-    # Build history list of Content objects
+    # Build history list of Content objects (with file parts if present)
     contents = []
     for msg in st.session_state.messages:
         gemini_role = "user" if msg["role"] == "user" else "model"
+        parts = [types.Part.from_text(text=msg["content"])]
+        
+        if "file_bytes" in msg and msg["file_bytes"] is not None:
+            parts.append(
+                types.Part.from_bytes(
+                    data=msg["file_bytes"],
+                    mime_type=msg["file_type"]
+                )
+            )
+            
         contents.append(
             types.Content(
                 role=gemini_role,
-                parts=[types.Part.from_text(text=msg["content"])]
+                parts=parts
             )
         )
         
@@ -297,5 +425,10 @@ if prompt := st.chat_input("How can I help you today?"):
                 "sources": sources
             })
             
+            # If a file was uploaded, clear it for the next turn
+            if file_bytes:
+                st.session_state.file_uploader_key += 1
+                st.rerun()
+                
         except Exception as e:
             st.error(f"❌ Error during response generation: {e}")
