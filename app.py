@@ -82,10 +82,12 @@ load_dotenv()
 
 # Check for API key
 api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key and "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets.get("GEMINI_API_KEY")
 
 if not api_key or api_key == "your_actual_api_key_here":
-    st.error("🔑 **Gemini API Key missing!** Please set the `GEMINI_API_KEY` in your `.env` file to start using the chatbot.")
-    st.info("You can get a free key from the [Google AI Studio](https://aistudio.google.com/). Once you have it, add it to your `.env` file in this directory.")
+    st.error("🔑 **Gemini API Key missing!**")
+    st.info("To run the assistant, please add `GEMINI_API_KEY` to your `.env` file (local development) or Streamlit Secrets (cloud deployment).")
     st.stop()
 
 # Initialize Google Gen AI client
