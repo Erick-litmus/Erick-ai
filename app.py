@@ -71,7 +71,7 @@ st.markdown("""
     .main-title {
         font-family: 'Outfit', sans-serif;
         font-weight: 800;
-        font-size: 3rem;
+        font-size: clamp(2rem, 5vw, 3rem);
         background: linear-gradient(135deg, #FF4B2B 0%, #FF416C 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -79,7 +79,7 @@ st.markdown("""
     }
     
     .subtitle {
-        font-size: 1.1rem;
+        font-size: clamp(0.9rem, 2.5vw, 1.1rem);
         color: #888888;
         margin-bottom: 2rem;
     }
@@ -276,7 +276,7 @@ for msg in st.session_state.messages:
             file_type = msg["file_type"]
             file_name = msg["file_name"]
             if file_type.startswith("image/"):
-                st.image(msg["file_bytes"], caption=file_name, width=400)
+                st.image(msg["file_bytes"], caption=file_name, use_container_width=True)
             elif file_type.startswith("audio/"):
                 st.audio(msg["file_bytes"], format=file_type)
             elif file_type == "application/pdf":
@@ -310,7 +310,7 @@ if prompt := st.chat_input("How can I help you today?"):
         st.markdown(prompt)
         if file_bytes:
             if file_type.startswith("image/"):
-                st.image(file_bytes, caption=file_name, width=400)
+                st.image(file_bytes, caption=file_name, use_container_width=True)
             elif file_type.startswith("audio/"):
                 st.audio(file_bytes, format=file_type)
             elif file_type == "application/pdf":
