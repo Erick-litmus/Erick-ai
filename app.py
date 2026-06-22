@@ -122,6 +122,11 @@ st.markdown("""
         margin-top: 5px;
         border: 1px solid rgba(88, 166, 255, 0.3);
     }
+
+    /* Hide Streamlit default menu and footer (GitHub link, Made with Streamlit, etc.) */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
