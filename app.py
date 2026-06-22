@@ -123,10 +123,8 @@ st.markdown("""
         border: 1px solid rgba(88, 166, 255, 0.3);
     }
 
-    /* Hide Streamlit default menu and footer (GitHub link, Made with Streamlit, etc.) */
+    /* Hide the top-right menu to prevent access to GitHub source code link */
     #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
