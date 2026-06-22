@@ -127,15 +127,10 @@ st.markdown("""
 
 load_dotenv()
 
-# Check for API key
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key and "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets.get("GEMINI_API_KEY")
-
-if not api_key or api_key == "your_actual_api_key_here":
-    st.error("🔑 **Gemini API Key missing!**")
-    st.info("To run the assistant, please add `GEMINI_API_KEY` to your `.env` file (local development) or Streamlit Secrets (cloud deployment).")
-    st.stop()
+# Load owner's fallback API key from .env or Streamlit Secrets
+owner_api_key = os.environ.get("GEMINI_API_KEY")
+if not owner_api_key and "GEMINI_API_KEY" in st.secrets:
+    owner_api_key = st.secrets.get("GEMINI_API_KEY")
 
 # Initialize Google Gen AI client
 try:
@@ -145,15 +140,34 @@ except ImportError:
     st.error("📦 **Missing library!** The `google-genai` SDK is not installed in this environment. Please run `pip install -r requirements.txt` in your virtual environment.")
     st.stop()
 
-# Set up GenAI Client
 @st.cache_resource
-def get_genai_client():
-    return genai.Client()
-
-client = get_genai_client()
+def get_genai_client(api_key: str):
+    return genai.Client(api_key=api_key)
 
 # ================= SIDEBAR CONFIGURATION =================
 st.sidebar.markdown("<h2 style='font-family: Outfit; font-weight:600;'>⚙️ Control Panel</h2>", unsafe_allow_html=True)
+
+# 0. Bring Your Own Key (BYOK) — users can enter their own Gemini API key
+st.sidebar.subheader("🔑 Your API Key")
+user_api_key = st.sidebar.text_input(
+    "Gemini API Key (optional)",
+    type="password",
+    placeholder="Paste your key here (AIza...)",
+    help="Get a free key at aistudio.google.com. If left blank, the app's shared key is used (may be rate-limited)."
+)
+if user_api_key:
+    active_api_key = user_api_key
+    st.sidebar.success("✅ Using your personal API key.", icon="🔒")
+elif owner_api_key:
+    active_api_key = owner_api_key
+    st.sidebar.caption("Using shared key. Enter your own key above for unlimited usage.")
+else:
+    st.sidebar.error("No API key found. Please enter your Gemini API key above.")
+    st.error("🔑 **Gemini API Key missing!** Please paste your Gemini API key in the sidebar to start chatting.")
+    st.info("Get a free key in 10 seconds at [Google AI Studio](https://aistudio.google.com/).")
+    st.stop()
+
+client = get_genai_client(active_api_key)
 
 # 1. Model Selection
 model_choice = st.sidebar.selectbox(
